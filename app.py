@@ -57,12 +57,36 @@ def init_db():
     for cidade in MUNICIPIOS_SRS:
         senha = gerar_senha_municipio(cidade)
         nivel_acesso = 'admin' if cidade == "Passos" else 'user'
-        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, ?)", (cidade, senha, nivel_acesso))
+        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, ?)", (cidade, senate, nivel_acesso))
         
     conn.commit()
     conn.close()
 
 init_db()
+
+# --- CAIXA DE DIÁLOGO DE PERIGO PARA EXCLUSÃO (DUPLA CONFIRMAÇÃO) ---
+@st.dialog("⚠️ CONFIRMAÇÃO DE EXCLUSÃO PERMANENTE")
+def confirmar_exclusao_dialog(id_registro, nome_paciente, municipio_paciente):
+    st.markdown("<h3 style='color: #d9534f; margin-top: 0;'>🛑 Atenção!</h3>", unsafe_allow_html=True)
+    st.write("Você tem certeza absoluta que deseja excluir permanentemente este registro?")
+    
+    # Caixa informativa com os dados do registro alvo
+    st.error(f"**ID do Registro:** {id_registro}\n\n**Paciente:** {nome_paciente}\n\n**Município:** {municipio_paciente}")
+    st.markdown("<p style='color: gray; font-size: 13px;'>*Esta ação é irreversível e o registro sumirá de todos os relatórios e exportações.</p>", unsafe_allow_html=True)
+    
+    col_cancelar, col_deletar = st.columns(2)
+    with col_cancelar:
+        if st.button("Cancelar", use_container_width=True):
+            st.rerun()
+    with col_deletar:
+        if st.button("💥 Sim, Excluir Registro", use_container_width=True):
+            conn = sqlite3.connect('pdceaf_database.db')
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM registros WHERE id=?", (id_registro,))
+            conn.commit()
+            conn.close()
+            st.success("O registro foi deletado com sucesso do banco de dados!")
+            st.rerun()
 
 # 3. SESSÃO DE AUTENTICAÇÃO
 if 'logged_in' not in st.session_state:
@@ -145,7 +169,6 @@ if menu_opcao == "Visualizar Registros":
     if df.empty:
         st.warning("Nenhum registro encontrado.")
     else:
-        # Cria uma cópia formatada apenas para exibição em tela
         df_visualizacao = df.copy()
         df_visualizacao['resolvido'] = df_visualizacao['resolvido'].apply(lambda x: "✅ Sim" if x == 1 else "❌ Não")
         st.dataframe(df_visualizacao, use_container_width=True)
@@ -159,7 +182,6 @@ if menu_opcao == "Visualizar Registros":
         
         col_csv, col_txt, col_pdf = st.columns(3)
         
-        # Variáveis auxiliares para evitar quebras de sintaxe no interpretador
         data_atual_slug = datetime.today().strftime('%Y-%m-%d')
         data_atual_pt = datetime.today().strftime('%d/%m/%Y %H:%M:%S')
         nome_usuario_atual = st.session_state.username
@@ -220,97 +242,55 @@ if menu_opcao == "Visualizar Registros":
             )
             st.caption("💡 *Dica do PDF:* Ao abrir o arquivo baixado, pressione **Ctrl + P** no teclado e selecione **'Salvar como PDF'**!")
 
-# --- ABA 2: INSERIR NOVO REGISTRO ---
+# --- ABA 2: INSERIR NOVO REGISTRO (ORDEM DE TABULAÇÃO EM GRADE HORIZONTAL) ---
 elif menu_opcao == "Inserir Novo Registro":
     st.header("📝 Cadastrar Nova Solicitação")
     
+    if st.session_state.username in MUNICIPIOS_SRS:
+        idx_padrao_municipio = MUNICIPIOS_SRS.index(st.session_state.username)
+    else:
+        idx_padrao_municipio = 0
+
     with st.form("insert_form", clear_on_submit=True):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.session_state.username in MUNICIPIOS_SRS:
-                idx_padrao_municipio = MUNICIPIOS_SRS.index(st.session_state.username)
-            else:
-                idx_padrao_municipio = 0
-                
-            municipio = st.selectbox("Município", MUNICIPIOS_SRS, index=idx_padrao_municipio)
-            nome = st.text_input("Nome do Paciente")
-            cpf = st.text_input("CPF")
-        with col2:
-            num_sigaf = st.text_input("N° SIGAF")
-            num_sei = st.text_input("N° SEI")
-            medicamento = st.text_input("Medicamento")
-        with col3:
-            status_sigaf = st.selectbox("Status SIGAF", ["Deferido", "Indeferido", "Em análise", "Em certificação"])
-            data_envio = st.date_input("Data de Envio", datetime.today()).strftime('%Y-%m-%d')
-            situacao_caf = st.selectbox("Situação (Preenchimento CAF)", ["Monitoramento", "Processo Novo", "Reavaliação", "Via Rápida", "Via Urgente"])
+        # LINHA 1 DA TABULAÇÃO: Identificação do Paciente
+        r1_c1, r1_c2, r1_c3 = st.columns([2, 1, 1])
+        with r1_c1:
+            nome = st.text_input("1. Nome do Paciente")
+        with r1_c2:
+            cpf = st.text_input("2. CPF")
+        with r1_c3:
+            municipio = st.selectbox("3. Município", MUNICIPIOS_SRS, index=idx_padrao_municipio)
             
-        analisado_por = st.text_input("Analisado por:")
-        resolvido = st.checkbox("Resolvido")
+        # LINHA 2 DA TABULAÇÃO: Documentação e Datas
+        r2_c1, r2_c2, r2_c3 = st.columns(3)
+        with r2_c1:
+            num_sigaf = st.text_input("4. N° SIGAF")
+        with r2_c2:
+            num_sei = st.text_input("5. N° SEI")
+        with r2_c3:
+            data_envio = st.date_input("6. Data de Envio", datetime.today()).strftime('%Y-%m-%d')
+            
+        # LINHA 3 DA TABULAÇÃO: Detalhes Clínicos e Status
+        r3_c1, r3_c2, r3_c3 = st.columns([2, 1, 1])
+        with r3_c1:
+            medicamento = st.text_input("7. Medicamento")
+        with r3_c2:
+            status_sigaf = st.selectbox("8. Status SIGAF", ["Deferido", "Indeferido", "Em análise", "Em certificação"])
+        with r3_c3:
+            situacao_caf = st.selectbox("9. Situação (Preenchimento CAF)", ["Monitoramento", "Processo Novo", "Reavaliação", "Via Rápida", "Via Urgente"])
+            
+        # LINHA 4 DA TABULAÇÃO: Finalização Técnica
+        r4_c1, r4_c2 = st.columns([3, 1])
+        with r4_c1:
+            analisado_por = st.text_input("10. Analisado por:")
+        with r4_c2:
+            st.markdown("<div style='padding-top: 28px;'></div>", unsafe_allow_html=True) # Alinhamento vertical do Checkbox com o campo ao lado
+            resolvido = st.checkbox("11. Resolvido")
+            
+        st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
+        submit_btn = st.form_submit_button("💾 Salvar Registro")
         
-        submit_btn = st.form_submit_button("Salvar Registro")
         if submit_btn:
             insert_sql = """
                 INSERT INTO registros (usuario_criador, municipio, nome, cpf, num_sigaf, num_sei, medicamento, status_sigaf, data_envio, situacao_caf, analisado_por, resolvido)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            run_query(insert_sql, (st.session_state.username, municipio, nome, cpf, num_sigaf, num_sei, medicamento, status_sigaf, data_envio, situacao_caf, analisado_por, 1 if resolvido else 0))
-            st.success("Registro inserido com sucesso!")
-
-# --- ABA 3: GERENCIAR EXISTENTES ---
-elif menu_opcao == "Gerenciar Existentes":
-    st.header("⚙️ Editar ou Remover Registros")
-    df_edit = run_query(view_query, params, is_select=True)
-    
-    if df_edit.empty:
-        st.warning("Não há dados disponíveis para edição.")
-    else:
-        registro_opcoes = df_edit.apply(lambda r: f"ID: {r['id']} | Paciente: {r['nome']} ({r['municipio']})", axis=1).tolist()
-        selecionado = st.selectbox("Escolha o registro que deseja modificar:", registro_opcoes)
-        id_selecionado = int(selecionado.split(" | ")[0].replace("ID: ", ""))
-        row = df_edit[df_edit['id'] == id_selecionado].iloc[0]
-        
-        st.markdown("---")
-        st.subheader(f"Modificando Registro ID: {id_selecionado}")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            idx_mun = MUNICIPIOS_SRS.index(row['municipio']) if row['municipio'] in MUNICIPIOS_SRS else 0
-            edit_municipio = st.selectbox("Município", MUNICIPIOS_SRS, index=idx_mun)
-            edit_nome = st.text_input("Nome do Paciente", value=row['nome'])
-            edit_cpf = st.text_input("CPF", value=row['cpf'])
-        with col2:
-            edit_num_sigaf = st.text_input("N° SIGAF", value=row['num_sigaf'])
-            edit_num_sei = st.text_input("N° SEI", value=row['num_sei'])
-            edit_medicamento = st.text_input("Medicamento", value=row['medicamento'])
-        with col3:
-            opcoes_sigaf = ["Deferido", "Indeferido", "Em análise", "Em certificação"]
-            idx_sigaf = opcoes_sigaf.index(row['status_sigaf']) if row['status_sigaf'] in opcoes_sigaf else 0
-            edit_status_sigaf = st.selectbox("Status SIGAF", opcoes_sigaf, index=idx_sigaf)
-            try:
-                dt_obj = datetime.strptime(row['data_envio'], '%Y-%m-%d')
-            except:
-                dt_obj = datetime.today()
-            edit_data_envio = st.date_input("Data de Envio", dt_obj).strftime('%Y-%m-%d')
-            opcoes_caf = ["Monitoramento", "Processo Novo", "Reavaliação", "Via Rápida", "Via Urgente"]
-            idx_caf = opcoes_caf.index(row['situacao_caf']) if row['situacao_caf'] in opcoes_caf else 0
-            edit_situacao_caf = st.selectbox("Situação (Preenchimento CAF)", opcoes_caf, index=idx_caf)
-            
-        edit_analisado_por = st.text_input("Analisado por:", value=row['analisado_por'])
-        edit_resolvido = st.checkbox("Resolvido", value=bool(row['resolvido']))
-        
-        btn_atualizar, btn_deletar = st.columns(2)
-        with btn_atualizar:
-            if st.button("💾 Gravar Alterações", use_container_width=True):
-                update_sql = """
-                    UPDATE registros SET 
-                    municipio=?, nome=?, cpf=?, num_sigaf=?, num_sei=?, medicamento=?, status_sigaf=?, data_envio=?, situacao_caf=?, analisado_por=?, resolvido=?
-                    WHERE id=?
-                """
-                run_query(update_sql, (edit_municipio, edit_nome, edit_cpf, edit_num_sigaf, edit_num_sei, edit_medicamento, edit_status_sigaf, edit_data_envio, edit_situacao_caf, edit_analisado_por, 1 if edit_resolvido else 0, id_selecionado))
-                st.success("Alterações gravadas com sucesso!")
-                st.rerun()
-        with btn_deletar:
-            if st.button("❌ Excluir Registro Permanente", use_container_width=True):
-                run_query("DELETE FROM registros WHERE id=?", (id_selecionado,))
-                st.warning("Registro excluído!")
-                st.rerun()
+                VALUES
