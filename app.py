@@ -55,7 +55,7 @@ def init_db():
     cursor.execute("INSERT OR REPLACE INTO usuarios VALUES ('srsmedpassos@gmail.com', 'srs123456', 'admin')")
     for cidade in MUNICIPIOS_SRS:
         senha = gerar_senha_municipio(cidade)
-        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, 'user')", (cidade, senha))
+        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, 'user')", (cidade, senate))
     conn.commit()
     conn.close()
 
@@ -86,10 +86,10 @@ def logout_user():
     st.session_state.role = ""
     st.rerun()
 
-# --- TELA DE LOGIN ---
+# --- TELA DE LOGIN (CORRIGIDA AQUI) ---
 if not st.session_state.logged_in:
-    st.markdown("<h2 style='text-align: center;'>🔐 Sistema de Alimentação Planilha PDCEAF</h2>", unsafe_allow_stdio=True)
-    st.markdown("<h4 style='text-align: center; color: gray;'>SRS Passos - MG</h4>", unsafe_allow_stdio=True)
+    st.markdown("<h2 style='text-align: center;'>🔐 Sistema de Alimentação Planilha PDCEAF</h2>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: gray;'>SRS Passos - MG</h4>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
@@ -151,7 +151,6 @@ if menu_opcao == "Visualizar Registros":
         st.subheader("📥 Exportar Dados para Excel")
         df_total = run_query("SELECT * FROM registros", (), is_select=True)
         if not df_total.empty:
-            # Converter para Excel em memória
             import io
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
