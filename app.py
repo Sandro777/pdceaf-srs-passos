@@ -55,7 +55,7 @@ def init_db():
     cursor.execute("INSERT OR REPLACE INTO usuarios VALUES ('srsmedpassos@gmail.com', 'srs123456', 'admin')")
     for cidade in MUNICIPIOS_SRS:
         senha = gerar_senha_municipio(cidade)
-        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, 'user')", (cidade, senate))
+        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, 'user')", (cidade, senha))
     conn.commit()
     conn.close()
 
@@ -86,7 +86,7 @@ def logout_user():
     st.session_state.role = ""
     st.rerun()
 
-# --- TELA DE LOGIN (CORRIGIDA AQUI) ---
+# --- TELA DE LOGIN ---
 if not st.session_state.logged_in:
     st.markdown("<h2 style='text-align: center;'>🔐 Sistema de Alimentação Planilha PDCEAF</h2>", unsafe_allow_html=True)
     st.markdown("<h4 style='text-align: center; color: gray;'>SRS Passos - MG</h4>", unsafe_allow_html=True)
