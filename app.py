@@ -53,9 +53,12 @@ def init_db():
         )
     ''')
     cursor.execute("INSERT OR REPLACE INTO usuarios VALUES ('srsmedpassos@gmail.com', 'srs123456', 'admin')")
+    
     for cidade in MUNICIPIOS_SRS:
         senha = gerar_senha_municipio(cidade)
-        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, 'user')", (cidade, senha))
+        nivel_acesso = 'admin' if cidade == "Passos" else 'user'
+        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, ?)", (cidade, senha, nivel_acesso))
+        
     conn.commit()
     conn.close()
 
@@ -126,134 +129,84 @@ def run_query(query, params=(), is_select=False):
     conn.commit()
     conn.close()
 
-# Regra de Segurança por nível de acesso
+# Regra de Segurança com Ordenação obrigatória por ordem de Inclusão (id ASC)
 if st.session_state.role == "admin":
-    view_query = "SELECT * FROM registros"
+    view_query = "SELECT * FROM registros ORDER BY id ASC"
     params = ()
 else:
-    view_query = "SELECT * FROM registros WHERE usuario_criador = ?"
+    view_query = "SELECT * FROM registros WHERE usuario_criador = ? ORDER BY id ASC"
     params = (st.session_state.username,)
 
-# --- ABA 1: VISUALIZAÇÃO DE REGISTROS ---
+# --- ABA 1: VISUALIZAÇÃO E EXPORTAÇÃO DE REGISTROS ---
 if menu_opcao == "Visualizar Registros":
-    st.header("📋 Banco de Dados Atual")
+    st.header("📋 Banco de Dados Atual (Modo Administrador)" if st.session_state.role == "admin" else "📋 Banco de Dados Atual")
     df = run_query(view_query, params, is_select=True)
     
     if df.empty:
-        st.warning("Nenhum registro encontrado para o seu usuário.")
+        st.warning("Nenhum registro encontrado.")
     else:
-        df['resolvido'] = df['resolvido'].apply(lambda x: "✅ Sim" if x == 1 else "❌ Não")
-        st.dataframe(df, use_container_width=True)
+        # Cria uma cópia formatada apenas para exibição em tela
+        df_visualizacao = df.copy()
+        df_visualizacao['resolvido'] = df_visualizacao['resolvido'].apply(lambda x: "✅ Sim" if x == 1 else "❌ Não")
+        st.dataframe(df_visualizacao, use_container_width=True)
         
-    # Ferramenta de Backup Exclusiva do Administrador
-    if st.session_state.role == "admin":
+        # --- NOVA SEÇÃO DE EXPORTAÇÃO UNIFICADA (Disponível para TODOS os usuários) ---
         st.markdown("---")
-        st.subheader("📥 Exportar Dados para Excel")
-        df_total = run_query("SELECT * FROM registros", (), is_select=True)
-        if not df_total.empty:
-            import io
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df_total.to_excel(writer, index=False, sheet_name='Banco de Dados CAF')
+        st.subheader("📥 Exportar Registros Otimizados")
+        st.markdown(
+            f"Baixe os registros exibidos acima em formatos de alta compatibilidade. "
+            f"*(Total de **{len(df)}** linhas estruturadas por ordem cronológica de inclusão)*."
+        )
+        
+        col_csv, col_txt, col_pdf = st.columns(3)
+        
+        with col_csv:
+            # utf-8-sig garante que acentos abram perfeitamente direto no Excel ou Google Sheets brasileiro
+            csv_data = df.to_csv(index=False, encoding='utf-8-sig')
             st.download_button(
-                label="📥 Baixar Planilha Completa atualizada (.xlsx)",
-                data=buffer.getvalue(),
-                file_name=f"Planilha_PDCEAF_Backup_{datetime.today().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.ms-excel"
+                label="📥 Baixar em CSV (Excel / Sheets)",
+                data=csv_data,
+                file_name=f"PDCEAF_Export_{datetime.today().strftime('%Y-%m-%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
             )
-
-# --- ABA 2: INSERIR NOVO REGISTRO (MUNICÍPIO PADRÃO CONFIGURADO AQUI) ---
-elif menu_opcao == "Inserir Novo Registro":
-    st.header("📝 Cadastrar Nova Solicitação")
-    
-    with st.form("insert_form", clear_on_submit=True):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            # Identifica se o usuário logado é uma cidade da lista e descobre a posição dela
-            if st.session_state.username in MUNICIPIOS_SRS:
-                idx_padrao_municipio = MUNICIPIOS_SRS.index(st.session_state.username)
-            else:
-                idx_padrao_municipio = 0 # Caso seja admin, padroniza no primeiro item
-                
-            municipio = st.selectbox("Município", MUNICIPIOS_SRS, index=idx_padrao_municipio)
-            nome = st.text_input("Nome do Paciente")
-            cpf = st.text_input("CPF")
-        with col2:
-            num_sigaf = st.text_input("N° SIGAF")
-            num_sei = st.text_input("N° SEI")
-            medicamento = st.text_input("Medicamento")
-        with col3:
-            status_sigaf = st.selectbox("Status SIGAF", ["Deferido", "Indeferido", "Em análise", "Em certificação"])
-            data_envio = st.date_input("Data de Envio", datetime.today()).strftime('%Y-%m-%d')
-            situacao_caf = st.selectbox("Situação (Preenchimento CAF)", ["Monitoramento", "Processo Novo", "Reavaliação", "Via Rápida", "Via Urgente"])
             
-        analisado_por = st.text_input("Analisado por:")
-        resolvido = st.checkbox("Resolvido")
-        
-        submit_btn = st.form_submit_button("Salvar Registro")
-        if submit_btn:
-            insert_sql = """
-                INSERT INTO registros (usuario_criador, municipio, nome, cpf, num_sigaf, num_sei, medicamento, status_sigaf, data_envio, situacao_caf, analisado_por, resolvido)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        with col_txt:
+            # Formato de texto separado por tabulação (Tab), ideal para relatórios limpos no Bloco de Notas
+            txt_data = df.to_csv(index=False, sep='\t', encoding='utf-8')
+            st.download_button(
+                label="📥 Baixar em TXT (Tabulado)",
+                data=txt_data,
+                file_name=f"PDCEAF_Export_{datetime.today().strftime('%Y-%m-%d')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+            
+        with col_pdf:
+            # Estrutura HTML limpa para geração nativa de PDF direto pelas ferramentas do navegador
+            html_table = df.to_html(index=False, classes='table')
+            html_content = f"""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Relatório Oficial PDCEAF</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 30px; color: #333; }}
+                    h2 {{ color: #1f77b4; border-bottom: 2px solid #1f77b4; padding-bottom: 8px; }}
+                    p {{ font-size: 14px; margin: 4px 0; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+                    th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 11px; }}
+                    th {{ background-color: #f5f5f5; font-weight: bold; }}
+                    tr:nth-child(even) {{ background-color: #fafafa; }}
+                </style>
+            </head>
+            <body>
+                <h2>Relatório de Solicitações PDCEAF - SRS Passos</h2>
+                <p><strong>Emitido por:</strong> {st.session_state.username}</p>
+                <p><strong>Nível de Acesso:</strong> {st.session_state.role.upper()}</p>
+                <p><strong>Data de Exportação:</strong> {datetime.today().strftime('%d/%m/%Y %H:%M:%S')}</p>
+                {html_table}
+            </body>
+            </html>
             """
-            run_query(insert_sql, (st.session_state.username, municipio, nome, cpf, num_sigaf, num_sei, medicamento, status_sigaf, data_envio, situacao_caf, analisado_por, 1 if resolvido else 0))
-            st.success("Registro inserido com sucesso!")
-
-# --- ABA 3: GERENCIAR EXISTENTES ---
-elif menu_opcao == "Gerenciar Existentes":
-    st.header("⚙️ Editar ou Remover Registros")
-    df_edit = run_query(view_query, params, is_select=True)
-    
-    if df_edit.empty:
-        st.warning("Não há dados disponíveis para edição.")
-    else:
-        registro_opcoes = df_edit.apply(lambda r: f"ID: {r['id']} | Paciente: {r['nome']} ({r['municipio']})", axis=1).tolist()
-        selecionado = st.selectbox("Escolha o registro que deseja modificar:", registro_opcoes)
-        id_selecionado = int(selecionado.split(" | ")[0].replace("ID: ", ""))
-        row = df_edit[df_edit['id'] == id_selecionado].iloc[0]
-        
-        st.markdown("---")
-        st.subheader(f"Modificando Registro ID: {id_selecionado}")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            idx_mun = MUNICIPIOS_SRS.index(row['municipio']) if row['municipio'] in MUNICIPIOS_SRS else 0
-            edit_municipio = st.selectbox("Município", MUNICIPIOS_SRS, index=idx_mun)
-            edit_nome = st.text_input("Nome do Paciente", value=row['nome'])
-            edit_cpf = st.text_input("CPF", value=row['cpf'])
-        with col2:
-            edit_num_sigaf = st.text_input("N° SIGAF", value=row['num_sigaf'])
-            edit_num_sei = st.text_input("N° SEI", value=row['num_sei'])
-            edit_medicamento = st.text_input("Medicamento", value=row['medicamento'])
-        with col3:
-            opcoes_sigaf = ["Deferido", "Indeferido", "Em análise", "Em certificação"]
-            idx_sigaf = opcoes_sigaf.index(row['status_sigaf']) if row['status_sigaf'] in opcoes_sigaf else 0
-            edit_status_sigaf = st.selectbox("Status SIGAF", opcoes_sigaf, index=idx_sigaf)
-            try:
-                dt_obj = datetime.strptime(row['data_envio'], '%Y-%m-%d')
-            except:
-                dt_obj = datetime.today()
-            edit_data_envio = st.date_input("Data de Envio", dt_obj).strftime('%Y-%m-%d')
-            opcoes_caf = ["Monitoramento", "Processo Novo", "Reavaliação", "Via Rápida", "Via Urgente"]
-            idx_caf = opcoes_caf.index(row['situacao_caf']) if row['situacao_caf'] in opcoes_caf else 0
-            edit_situacao_caf = st.selectbox("Situação (Preenchimento CAF)", opcoes_caf, index=idx_caf)
-            
-        edit_analisado_por = st.text_input("Analisado por:", value=row['analisado_por'])
-        edit_resolvido = st.checkbox("Resolvido", value=bool(row['resolvido']))
-        
-        btn_atualizar, btn_deletar = st.columns(2)
-        with btn_atualizar:
-            if st.button("💾 Gravar Alterações", use_container_width=True):
-                update_sql = """
-                    UPDATE registros SET 
-                    municipio=?, nome=?, cpf=?, num_sigaf=?, num_sei=?, medicamento=?, status_sigaf=?, data_envio=?, situacao_caf=?, analisado_por=?, resolvido=?
-                    WHERE id=?
-                """
-                run_query(update_sql, (edit_municipio, edit_nome, edit_cpf, edit_num_sigaf, edit_num_sei, edit_medicamento, edit_status_sigaf, edit_data_envio, edit_situacao_caf, edit_analisado_por, 1 if edit_resolvido else 0, id_selecionado))
-                st.success("Alterações gravadas com sucesso!")
-                st.rerun()
-        with btn_deletar:
-            if st.button("❌ Excluir Registro Permanente", use_container_width=True):
-                run_query("DELETE FROM registros WHERE id=?", (id_selecionado,))
-                st.warning("Registro excluído!")
-                st.rerun()
+            st.download_button(
