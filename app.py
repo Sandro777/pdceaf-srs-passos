@@ -55,7 +55,7 @@ def init_db():
 
 init_db()
 
-# --- CAIXA DE DIÁLOGO DE CONFIRMAÇÃO DE EXCLUSÃO (MANTIDA) ---
+# --- CAIXA DE DIÁLOGO DE CONFIRMAÇÃO DE EXCLUSÃO ---
 @st.dialog("⚠️ CONFIRMAÇÃO DE EXCLUSÃO PERMANENTE")
 def confirmar_exclusao_dialog(id_registro, nome_paciente, municipio_paciente):
     st.markdown("<h3 style='color: #d9534f; margin-top: 0;'>🛑 Atenção!</h3>", unsafe_allow_html=True)
@@ -138,67 +138,118 @@ else:
     view_query = "SELECT * FROM registros WHERE usuario_criador = ? ORDER BY id ASC"
     params = (st.session_state.username,)
 
-# --- ABA 1: VISUALIZAÇÃO E EXPORTAÇÃO DE REGISTROS ---
+# --- ABA 1: VISUALIZAÇÃO COM FILTROS DE BUSCA POR CAMPO ---
 if menu_opcao == "Visualizar Registros":
     st.header("📋 Banco de Dados Atual (Modo Administrador)" if st.session_state.role == "admin" else "📋 Banco de Dados Atual")
-    df = run_query(view_query, params, is_select=True)
+    df_base = run_query(view_query, params, is_select=True)
     
-    if df.empty:
-        st.warning("Nenhum registro encontrado.")
+    if df_base.empty:
+        st.warning("Nenhum registro cadastrado no sistema.")
     else:
-        df_visualizacao = df.copy()
-        df_visualizacao["resolvido"] = df_visualizacao["resolvido"].apply(lambda x: "✅ Sim" if x == 1 else "❌ Não")
-        st.dataframe(df_visualizacao, use_container_width=True)
+        # PAINEL DE FILTROS SUPERIORES (Em cima da tabela de visualização)
+        st.markdown("### 🔍 Filtros de Busca Avançada")
         
+        # Linha 1 de Filtros
+        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+        with f_col1:
+            f_nome = st.text_input("👤 Nome do Paciente", key="filter_nome")
+        with f_col2:
+            f_cpf = st.text_input("🪪 CPF", key="filter_cpf")
+        with f_col3:
+            f_municipio = st.text_input("📍 Município", key="filter_municipio")
+        with f_col4:
+            f_medicamento = st.text_input("💊 Medicamento", key="filter_med")
+            
+        # Linha 2 de Filtros
+        f_col5, f_col6, f_col7, f_col8 = st.columns(4)
+        with f_col5:
+            f_sigaf = st.text_input("🔢 N° SIGAF", key="filter_sigaf")
+        with f_col6:
+            f_sei = st.text_input("📂 N° SEI", key="filter_sei")
+        with f_col7:
+            f_status = st.selectbox("📊 Status SIGAF", ["Todos", "Deferido", "Indeferido", "Em análise", "Em certificação"], key="filter_status")
+        with f_col8:
+            f_resolvido = st.selectbox("✅ Resolvido", ["Todos", "Sim", "Não"], key="filter_resolvido")
+
+        # Processamento e filtragem progressiva no DataFrame (Garante imunidade a maiúsculas/minúsculas)
+        df = df_base.copy()
+        if f_nome:
+            df = df[df['nome'].astype(str).str.contains(f_nome, case=False, na=False)]
+        if f_cpf:
+            df = df[df['cpf'].astype(str).str.contains(f_cpf, case=False, na=False)]
+        if f_municipio:
+            df = df[df['municipio'].astype(str).str.contains(f_municipio, case=False, na=False)]
+        if f_medicamento:
+            df = df[df['medicamento'].astype(str).str.contains(f_medicamento, case=False, na=False)]
+        if f_sigaf:
+            df = df[df['num_sigaf'].astype(str).str.contains(f_sigaf, case=False, na=False)]
+        if f_sei:
+            df = df[df['num_sei'].astype(str).str.contains(f_sei, case=False, na=False)]
+        if f_status != "Todos":
+            df = df[df['status_sigaf'] == f_status]
+        if f_resolvido != "Todos":
+            val_res_check = 1 if f_resolvido == "Sim" else 0
+            df = df[df['resolvido'] == val_res_check]
+
         st.markdown("---")
-        st.subheader("📥 Exportar Registros Otimizados")
         
-        total_linhas = len(df)
-        st.markdown(f"Baixe os registros exibidos acima em formatos de alta compatibilidade. *(Total de **{total_linhas}** linhas estruturadas por ordem cronológica de inclusão)*.")
-        
-        col_csv, col_txt, col_pdf = st.columns(3)
-        
-        data_atual_slug = datetime.today().strftime("%Y-%m-%d")
-        data_atual_pt = datetime.today().strftime("%d/%m/%Y %H:%M:%S")
-        nome_usuario_atual = st.session_state.username
-        role_usuario_atual = st.session_state.role.upper()
-        
-        with col_csv:
-            csv_data = df.to_csv(index=False, encoding="utf-8-sig")
-            st.download_button(
-                label="📥 Baixar em CSV (Excel / Sheets)",
-                data=csv_data,
-                file_name=f"PDCEAF_Export_{data_atual_slug}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+        # Exibição do resultado filtrado
+        if df.empty:
+            st.info("Nenhum registro corresponde aos critérios dos filtros aplicados.")
+        else:
+            df_visualizacao = df.copy()
+            df_visualizacao["resolvido"] = df_visualizacao["resolvido"].apply(lambda x: "✅ Sim" if x == 1 else "❌ Não")
+            st.dataframe(df_visualizacao, use_container_width=True)
             
-        with col_txt:
-            txt_data = df.to_csv(index=False, sep="\t", encoding="utf-8")
-            st.download_button(
-                label="📥 Baixar em TXT (Tabulado)",
-                data=txt_data,
-                file_name=f"PDCEAF_Export_{data_atual_slug}.txt",
-                mime="text/plain",
-                use_container_width=True
-            )
+            st.markdown("---")
+            st.subheader("📥 Exportar Registros Otimizados")
             
-        with col_pdf:
-            html_table = df.to_html(index=False, classes="table")
-            html_content = "<html><head><meta charset='utf-8'><title>Relatório Oficial PDCEAF</title><style>body { font-family: Arial, sans-serif; margin: 30px; color: #333; } h2 { color: #1f77b4; border-bottom: 2px solid #1f77b4; padding-bottom: 8px; } p { font-size: 14px; margin: 4px 0; } table { width: 100%; border-collapse: collapse; margin-top: 20px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 11px; } th { background-color: #f5f5f5; font-weight: bold; } tr:nth-child(even) { background-color: #fafafa; }</style></head><body><h2>Relatório de Solicitações PDCEAF - SRS Passos</h2>"
-            html_content += f"<p><strong>Emitido por:</strong> {nome_usuario_atual}</p>"
-            html_content += f"<p><strong>Nível de Acesso:</strong> {role_usuario_atual}</p>"
-            html_content += f"<p><strong>Data de Exportação:</strong> {data_atual_pt}</p>"
-            html_content += f"{html_table}</body></html>"
+            total_linhas = len(df)
+            st.markdown(f"Baixe os registros exibidos acima em formatos de alta compatibilidade. *(Total de **{total_linhas}** linhas estruturadas de acordo com a sua busca atual)*.")
             
-            st.download_button(
-                label="📄 Baixar Layout de Impressão (PDF)",
-                data=html_content.encode("utf-8"),
-                file_name=f"PDCEAF_Export_{data_atual_slug}.html",
-                mime="text/html",
-                use_container_width=True
-            )
-            st.caption("💡 *Dica do PDF:* Ao abrir o arquivo baixado, pressione **Ctrl + P** no teclado e selecione **'Salvar como PDF'**!")
+            col_csv, col_txt, col_pdf = st.columns(3)
+            
+            data_atual_slug = datetime.today().strftime("%Y-%m-%d")
+            data_atual_pt = datetime.today().strftime("%d/%m/%Y %H:%M:%S")
+            nome_usuario_atual = st.session_state.username
+            role_usuario_atual = st.session_state.role.upper()
+            
+            with col_csv:
+                csv_data = df.to_csv(index=False, encoding="utf-8-sig")
+                st.download_button(
+                    label="📥 Baixar em CSV (Excel / Sheets)",
+                    data=csv_data,
+                    file_name=f"PDCEAF_Export_{data_atual_slug}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                
+            with col_txt:
+                txt_data = df.to_csv(index=False, sep="\t", encoding="utf-8")
+                st.download_button(
+                    label="📥 Baixar em TXT (Tabulado)",
+                    data=txt_data,
+                    file_name=f"PDCEAF_Export_{data_atual_slug}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+                
+            with col_pdf:
+                html_table = df.to_html(index=False, classes="table")
+                html_content = "<html><head><meta charset='utf-8'><title>Relatório Oficial PDCEAF</title><style>body { font-family: Arial, sans-serif; margin: 30px; color: #333; } h2 { color: #1f77b4; border-bottom: 2px solid #1f77b4; padding-bottom: 8px; } p { font-size: 14px; margin: 4px 0; } table { width: 100%; border-collapse: collapse; margin-top: 20px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 11px; } th { background-color: #f5f5f5; font-weight: bold; } tr:nth-child(even) { background-color: #fafafa; }</style></head><body><h2>Relatório de Solicitações PDCEAF - SRS Passos</h2>"
+                html_content += f"<p><strong>Emitido por:</strong> {nome_usuario_atual}</p>"
+                html_content += f"<p><strong>Nível de Acesso:</strong> {role_usuario_atual}</p>"
+                html_content += f"<p><strong>Data de Exportação:</strong> {data_atual_pt}</p>"
+                html_content += f"{html_table}</body></html>"
+                
+                st.download_button(
+                    label="📄 Baixar Layout de Impressão (PDF)",
+                    data=html_content.encode("utf-8"),
+                    file_name=f"PDCEAF_Export_{data_atual_slug}.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
+                st.caption("💡 *Dica do PDF:* Ao abrir o arquivo baixado, pressione **Ctrl + P** no teclado e selecione **'Salvar como PDF'**!")
 
 # --- ABA 2: INSERIR NOVO REGISTRO ---
 elif menu_opcao == "Inserir Novo Registro":
