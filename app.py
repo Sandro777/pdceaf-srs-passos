@@ -162,14 +162,20 @@ if menu_opcao == "Visualizar Registros":
                 mime="application/vnd.ms-excel"
             )
 
-# --- ABA 2: INSERIR NOVO REGISTRO ---
+# --- ABA 2: INSERIR NOVO REGISTRO (MUNICÍPIO PADRÃO CONFIGURADO AQUI) ---
 elif menu_opcao == "Inserir Novo Registro":
     st.header("📝 Cadastrar Nova Solicitação")
     
     with st.form("insert_form", clear_on_submit=True):
         col1, col2, col3 = st.columns(3)
         with col1:
-            municipio = st.selectbox("Município", MUNICIPIOS_SRS)
+            # Identifica se o usuário logado é uma cidade da lista e descobre a posição dela
+            if st.session_state.username in MUNICIPIOS_SRS:
+                idx_padrao_municipio = MUNICIPIOS_SRS.index(st.session_state.username)
+            else:
+                idx_padrao_municipio = 0 # Caso seja admin, padroniza no primeiro item
+                
+            municipio = st.selectbox("Município", MUNICIPIOS_SRS, index=idx_padrao_municipio)
             nome = st.text_input("Nome do Paciente")
             cpf = st.text_input("CPF")
         with col2:
