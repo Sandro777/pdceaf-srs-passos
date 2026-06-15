@@ -5,7 +5,7 @@ import unicodedata
 from datetime import datetime
 
 # Configuração da página do Streamlit
-st.set_page_config(page_title="Sistema PDCEAF - SRS Passos", layout="wide")
+st.set_page_config(page_title="Gestão PDCEAF - SRS Passos", layout="wide")
 
 # 1. LISTA OFICIAL DE MUNICÍPIOS DA SRS PASSOS MG
 MUNICIPIOS_SRS = [
@@ -105,7 +105,7 @@ def logout_user():
 
 # --- TELA DE LOGIN ---
 if not st.session_state.logged_in:
-    st.markdown("<h2 style='text-align: center;'>🔐 Sistema de Alimentação Planilha PDCEAF</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>🔐 Sistema de Gerenciamento PDCEAF</h2>", unsafe_allow_html=True)
     st.markdown("<h4 style='text-align: center; color: gray;'>SRS Passos - MG</h4>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.5, 1])
