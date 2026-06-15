@@ -127,12 +127,14 @@ if not st.session_state.logged_in:
 st.sidebar.title("📌 Menu de Navegação")
 st.sidebar.info(f"**Usuário:**\n{st.session_state.username}")
 
-# Define as opções do menu de acordo com o nível de privilégio do usuário
-menu_opcoes = ["Visualizar Registros", "Inserir Novo Registro", "Gerenciar Existentes"]
-if st.session_state.role == "admin":
-    menu_opcoes.append("Backup e Restauração")
+# Define as opções padrão
+opcoes_menu = ["Visualizar Registros", "Inserir Novo Registro", "Gerenciar Existentes"]
 
-menu_opcao = st.sidebar.radio("Selecione uma ação:", menu_opcoes)
+# Adiciona a aba de backup apenas se for admin
+if st.session_state.role == "admin":
+    opcoes_menu.append("Backup e Restauração")
+
+menu_opcao = st.sidebar.radio("Selecione uma ação:", opcoes_menu)
 
 if st.sidebar.button("🚪 Sair do Sistema"):
     logout_user()
@@ -329,3 +331,54 @@ elif menu_opcao == "Gerenciar Existentes":
         r2_c1, r2_c2, r2_c3 = st.columns(3)
         with r2_c1:
             edit_num_sigaf = st.text_input("4. N° SIGAF", value=row["num_sigaf"])
+
+# --- ABA 4: BACKUP E RESTAURAÇÃO (Apenas Admin) ---
+elif menu_opcao == "Backup e Restauração" and st.session_state.role == "admin":
+    st.header("🗄️ Backup e Restauração do Sistema")
+    
+    # 1. DOWNLOAD DE BACKUP FÍSICO DO BANCO DE DADOS
+    st.markdown("### ⬇️ Exportar Backup Completo")
+    st.write("Esta opção baixa uma cópia integral e exata do banco de dados atual (arquivo SQLite).")
+    
+    try:
+        with open("pdceaf_database.db", "rb") as db_file:
+            st.download_button(
+                label="💾 Baixar Banco de Dados (.db)",
+                data=db_file,
+                file_name=f"Backup_PDCEAF_{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}.db",
+                mime="application/octet-stream",
+                use_container_width=True
+            )
+    except FileNotFoundError:
+        st.error("Arquivo de banco de dados não encontrado localmente.")
+
+    st.markdown("---")
+
+    # 2. RESTAURAÇÃO VIA IMPORTAÇÃO DE CSV
+    st.markdown("### ⬆️ Restaurar/Importar Registros")
+    st.info("Faça o upload de um arquivo **CSV** (modelo gerado na aba 'Visualizar Registros') para reinserir dados no sistema.")
+    
+    arquivo_upload = st.file_uploader("Selecione o arquivo CSV de backup", type=["csv"])
+    
+    if arquivo_upload is not None:
+        if st.button("🔄 Processar e Importar Dados", use_container_width=True):
+            try:
+                # Lê o CSV enviado
+                df_import = pd.read_csv(arquivo_upload)
+                
+                # Conecta ao banco de dados e insere os registros
+                conn = sqlite3.connect("pdceaf_database.db")
+                
+                # if_exists="append" vai ADICIONAR os dados aos já existentes.
+                # Se a coluna 'id' estiver no CSV, o SQLite a ignorará se for auto-incrementada no append, 
+                # ou poderá gerar erro de duplicidade. É recomendado remover a coluna 'id' do df_import antes.
+                if 'id' in df_import.columns:
+                    df_import = df_import.drop(columns=['id'])
+                
+                df_import.to_sql("registros", conn, if_exists="append", index=False)
+                conn.commit()
+                conn.close()
+                
+                st.success(f"✅ Operação concluída! {len(df_import)} registros foram importados com sucesso.")
+            except Exception as e:
+                st.error(f"❌ Ocorreu um erro durante a importação: {e}")
