@@ -127,14 +127,12 @@ if not st.session_state.logged_in:
 st.sidebar.title("📌 Menu de Navegação")
 st.sidebar.info(f"**Usuário:**\n{st.session_state.username}")
 
-# Define as opções padrão
-opcoes_menu = ["Visualizar Registros", "Inserir Novo Registro", "Gerenciar Existentes"]
-
-# Adiciona a aba de backup apenas se for admin
+# Define as opções do menu de acordo com o nível de privilégio do usuário
+menu_opcoes = ["Visualizar Registros", "Inserir Novo Registro", "Gerenciar Existentes"]
 if st.session_state.role == "admin":
-    opcoes_menu.append("Backup e Restauração")
+    menu_opcoes.append("Backup e Restauração")
 
-menu_opcao = st.sidebar.radio("Selecione uma ação:", opcoes_menu)
+menu_opcao = st.sidebar.radio("Selecione uma ação:", menu_opcoes)
 
 if st.sidebar.button("🚪 Sair do Sistema"):
     logout_user()
@@ -308,7 +306,51 @@ elif menu_opcao == "Gerenciar Existentes":
     st.header("⚙️ Editar ou Remover Registros")
     df_edit = run_query(view_query, params, is_select=True)
     
-    r4_c1, r4_c2 = st.columns([3, 1])
+    if df_edit.empty:
+        st.warning("Não há dados disponíveis para edição.")
+    else:
+        registro_opcoes = df_edit.apply(lambda r: f"ID: {r['id']} | Paciente: {r['nome']} ({r['municipio']})", axis=1).tolist()
+        selecionado = st.selectbox("Escolha o registro que deseja modificar:", registro_opcoes)
+        id_selecionado = int(selecionado.split(" | ")[0].replace("ID: ", ""))
+        row = df_edit[df_edit['id'] == id_selecionado].iloc[0]
+        
+        st.markdown("---")
+        st.subheader(f"Modificando Registro ID: {id_selecionado}")
+        
+        r1_c1, r1_c2, r1_c3 = st.columns([2, 1, 1])
+        with r1_c1:
+            edit_nome = st.text_input("1. Nome do Paciente", value=row["nome"])
+        with r1_c2:
+            edit_cpf = st.text_input("2. CPF", value=row["cpf"])
+        with r1_c3:
+            idx_mun = MUNICIPIOS_SRS.index(row["municipio"]) if row["municipio"] in MUNICIPIOS_SRS else 0
+            edit_municipio = st.selectbox("3. Município", MUNICIPIOS_SRS, index=idx_mun)
+            
+        r2_c1, r2_c2, r2_c3 = st.columns(3)
+        with r2_c1:
+            edit_num_sigaf = st.text_input("4. N° SIGAF", value=row["num_sigaf"])
+        with r2_c2:
+            edit_num_sei = st.text_input("5. N° SEI", value=row["num_sei"])
+        with r2_c3:
+            try:
+                dt_obj = datetime.strptime(row["data_envio"], "%Y-%m-%d")
+            except:
+                dt_obj = datetime.today()
+            edit_data_envio = st.date_input("6. Data de Envio", dt_obj).strftime("%Y-%m-%d")
+            
+        r3_c1, r3_c2, r3_c3 = st.columns([2, 1, 1])
+        with r3_c1:
+            edit_medicamento = st.text_input("7. Medicamento", value=row["medicamento"])
+        with r3_c2:
+            opcoes_sigaf = ["Deferido", "Indeferido", "Em análise", "Em certificação"]
+            idx_sigaf = opcoes_sigaf.index(row["status_sigaf"]) if row["status_sigaf"] in opcoes_sigaf else 0
+            edit_status_sigaf = st.selectbox("8. Status SIGAF", opcoes_sigaf, index=idx_sigaf)
+        with r3_c3:
+            opcoes_caf = ["Monitoramento", "Processo Novo", "Reavaliação", "Via Rápida", "Via Urgente"]
+            idx_caf = opcoes_caf.index(row["situacao_caf"]) if row["situacao_caf"] in opcoes_caf else 0
+            edit_situacao_caf = st.selectbox("9. Situação (Preenchimento CAF)", opcoes_caf, index=idx_caf)
+            
+        r4_c1, r4_c2 = st.columns([3, 1])
         with r4_c1:
             edit_analisado_por = st.text_input("10. Analisado por:", value=row["analisado_por"])
         with r4_c2:
@@ -317,66 +359,68 @@ elif menu_opcao == "Gerenciar Existentes":
             
         st.markdown("<div style='padding-top: 15px;'></div>", unsafe_allow_html=True)
         
-        col_btn_atualizar, col_btn_deletar = st.columns(2)
-        
-        with col_btn_atualizar:
+        btn_atualizar, btn_deletar = st.columns(2)
+        with btn_atualizar:
             if st.button("💾 Gravar Alterações", use_container_width=True):
                 update_sql = "UPDATE registros SET municipio=?, nome=?, cpf=?, num_sigaf=?, num_sei=?, medicamento=?, status_sigaf=?, data_envio=?, situacao_caf=?, analisado_por=?, resolvido=? WHERE id=?"
                 run_query(update_sql, (edit_municipio, edit_nome, edit_cpf, edit_num_sigaf, edit_num_sei, edit_medicamento, edit_status_sigaf, edit_data_envio, edit_situacao_caf, edit_analisado_por, 1 if edit_resolvido else 0, id_selecionado))
                 st.success("Alterações gravadas com sucesso!")
                 st.rerun()
                 
-        with col_btn_deletar:
+        with btn_deletar:
             if st.button("❌ Excluir Registro Permanente", use_container_width=True):
                 confirmar_exclusao_dialog(id_selecionado, row["nome"], row["municipio"])
 
-# --- ABA 4: BACKUP E RESTAURAÇÃO (Apenas Admin) ---
-elif menu_opcao == "Backup e Restauração" and st.session_state.role == "admin":
-    st.header("🗄️ Backup e Restauração do Sistema")
+# --- ABA 4: GERENCIAMENTO DE BACKUP E RESTAURAÇÃO (SÓ VISÍVEL PARA ADMIN) ---
+elif menu_opcao == "Backup e Restauração":
+    if st.session_state.role != "admin":
+        st.error("🔒 Acesso negado. Esta área é restrita para administradores do sistema.")
+        st.stop()
+        
+    st.header("💾 Backup e Restauração do Sistema (Modo Administrador)")
+    st.markdown("Gerencie a segurança e a integridade dos dados coletados na SRS Passos.")
     
-    # 1. DOWNLOAD DE BACKUP FÍSICO DO BANCO DE DADOS
-    st.markdown("### ⬇️ Exportar Backup Completo")
-    st.write("Esta opção baixa uma cópia integral e exata do banco de dados atual (arquivo SQLite).")
+    col_back, col_rest = st.columns(2)
     
-    try:
-        with open("pdceaf_database.db", "rb") as db_file:
+    with col_back:
+        st.subheader("📥 Exportar Banco de Dados Atual")
+        st.write("Baixe o arquivo estruturado do banco de dados SQLite (`.db`). Este arquivo contém todas as tabelas de cadastros de pacientes e credenciais de municípios do sistema.")
+        
+        try:
+            with open("pdceaf_database.db", "rb") as file_db:
+                bytes_db = file_db.read()
+                
+            data_slug = datetime.today().strftime("%Y-%m-%d_%H-%M")
             st.download_button(
-                label="💾 Baixar Banco de Dados (.db)",
-                data=db_file,
-                file_name=f"Backup_PDCEAF_{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}.db",
-                mime="application/octet-stream",
+                label="⬇️ Baixar Banco de Dados Completo (.db)",
+                data=bytes_db,
+                file_name=f"Backup_PDCEAF_Database_{data_slug}.db",
+                mime="application/x-sqlite3",
                 use_container_width=True
             )
-    except FileNotFoundError:
-        st.error("Arquivo de banco de dados não encontrado localmente.")
-
-    st.markdown("---")
-
-    # 2. RESTAURAÇÃO VIA IMPORTAÇÃO DE CSV
-    st.markdown("### ⬆️ Restaurar/Importar Registros")
-    st.info("Faça o upload de um arquivo **CSV** (modelo gerado na aba 'Visualizar Registros') para reinserir dados no sistema.")
-    
-    arquivo_upload = st.file_uploader("Selecione o arquivo CSV de backup", type=["csv"])
-    
-    if arquivo_upload is not None:
-        if st.button("🔄 Processar e Importar Dados", use_container_width=True):
-            try:
-                # Lê o CSV enviado
-                df_import = pd.read_csv(arquivo_upload)
-                
-                # Conecta ao banco de dados e insere os registros
-                conn = sqlite3.connect("pdceaf_database.db")
-                
-                # if_exists="append" vai ADICIONAR os dados aos já existentes.
-                # Se a coluna 'id' estiver no CSV, o SQLite a ignorará se for auto-incrementada no append, 
-                # ou poderá gerar erro de duplicidade. É recomendado remover a coluna 'id' do df_import antes.
-                if 'id' in df_import.columns:
-                    df_import = df_import.drop(columns=['id'])
-                
-                df_import.to_sql("registros", conn, if_exists="append", index=False)
-                conn.commit()
-                conn.close()
-                
-                st.success(f"✅ Operação concluída! {len(df_import)} registros foram importados com sucesso.")
-            except Exception as e:
-                st.error(f"❌ Ocorreu um erro durante a importação: {e}")
+            st.caption("📌 *Dica de Segurança:* Faça o download deste arquivo semanalmente para garantir cópias de segurança fora do ambiente em nuvem.")
+        except Exception as e:
+            st.error(f"Erro ao ler arquivo para backup: {e}")
+            
+    with col_rest:
+        st.subheader("📤 Restaurar Banco de Dados")
+        st.markdown("<p style='color: #d9534f; font-weight: bold;'>⚠️ AVISO CRÍTICO DE SUBSTITUIÇÃO:</p>", unsafe_allow_html=True)
+        st.write("Ao fazer o upload e restaurar um arquivo de banco de dados, você substituirá **TODOS** os registros e dados atuais permanentemente por este arquivo enviado.")
+        
+        arquivo_subido = st.file_uploader("Selecione um arquivo de banco de dados válido (.db)", type=["db"])
+        
+        if arquivo_subido is not None:
+            # Trava de segurança para evitar execução acidental
+            ciencia_risco = st.checkbox("Estou ciente de que esta ação apagará as informações atuais e quero prosseguir.")
+            
+            if st.button("💥 Executar Restauração Definitiva", disabled=not ciencia_risco, use_container_width=True):
+                try:
+                    # Sobrescreve o arquivo bruto do banco de dados local
+                    with open("pdceaf_database.db", "wb") as f:
+                        f.write(arquivo_subido.getbuffer())
+                    st.success("🎉 O Banco de dados foi restaurado e sincronizado com total sucesso!")
+                    st.balloons()
+                    st.info("Reiniciando os módulos do aplicativo para aplicar as modificações...")
+                    st.rerun()
+                except Exception as erro_restaura:
+                    st.error(f"Falha operacional ao restaurar arquivo: {erro_restaura}")
