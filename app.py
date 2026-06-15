@@ -316,8 +316,22 @@ elif menu_opcao == "Gerenciar Existentes":
         id_selecionado = int(selecionado.split(" | ")[0].replace("ID: ", ""))
         row = df_edit[df_edit['id'] == id_selecionado].iloc[0]
         
-        st.markdown("---")
-        st.subheader(f"Modificando Registro ID: {id_selecionado}")
+       st.markdown("<div style='padding-top: 15px;'></div>", unsafe_allow_html=True)
+        
+        # CORREÇÃO: Criando as duas colunas corretamente para os botões
+        col_btn_atualizar, col_btn_deletar = st.columns(2)
+        
+        with col_btn_atualizar:
+            if st.button("💾 Gravar Alterações", use_container_width=True):
+                update_sql = "UPDATE registros SET municipio=?, nome=?, cpf=?, num_sigaf=?, num_sei=?, medicamento=?, status_sigaf=?, data_envio=?, situacao_caf=?, analisado_por=?, resolvido=? WHERE id=?"
+                run_query(update_sql, (edit_municipio, edit_nome, edit_cpf, edit_num_sigaf, edit_num_sei, edit_medicamento, edit_status_sigaf, edit_data_envio, edit_situacao_caf, edit_analisado_por, 1 if edit_resolvido else 0, id_selecionado))
+                st.success("Alterações gravadas com sucesso!")
+                st.rerun()
+                
+        with col_btn_deletar:
+            # O botão agora está corretamente aninhado dentro da coluna e chamará a função @st.dialog
+            if st.button("❌ Excluir Registro Permanente", use_container_width=True):
+                confirmar_exclusao_dialog(id_selecionado, row["nome"], row["municipio"])
         
         r1_c1, r1_c2, r1_c3 = st.columns([2, 1, 1])
         with r1_c1:
