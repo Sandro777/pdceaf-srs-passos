@@ -308,8 +308,7 @@ elif menu_opcao == "Gerenciar Existentes":
     st.header("⚙️ Editar ou Remover Registros")
     df_edit = run_query(view_query, params, is_select=True)
     
-    # --- COMECE A COPIAR AQUI ---
-        r4_c1, r4_c2 = st.columns([3, 1])
+    r4_c1, r4_c2 = st.columns([3, 1])
         with r4_c1:
             edit_analisado_por = st.text_input("10. Analisado por:", value=row["analisado_por"])
         with r4_c2:
@@ -330,20 +329,6 @@ elif menu_opcao == "Gerenciar Existentes":
         with col_btn_deletar:
             if st.button("❌ Excluir Registro Permanente", use_container_width=True):
                 confirmar_exclusao_dialog(id_selecionado, row["nome"], row["municipio"])
-        # --- TERMINE DE COPIAR AQUI ---
-        
-       r1_c1, r1_c2, r1_c3 = st.columns([2, 1, 1])
-        with r1_c1:
-            edit_nome = st.text_input("1. Nome do Paciente", value=row["nome"])
-        with r1_c2:
-            edit_cpf = st.text_input("2. CPF", value=row["cpf"])
-        with r1_c3:
-            idx_mun = MUNICIPIOS_SRS.index(row["municipio"]) if row["municipio"] in MUNICIPIOS_SRS else 0
-            edit_municipio = st.selectbox("3. Município", MUNICIPIOS_SRS, index=idx_mun)
-            
-        r2_c1, r2_c2, r2_c3 = st.columns(3)
-        with r2_c1:
-            edit_num_sigaf = st.text_input("4. N° SIGAF", value=row["num_sigaf"])
 
 # --- ABA 4: BACKUP E RESTAURAÇÃO (Apenas Admin) ---
 elif menu_opcao == "Backup e Restauração" and st.session_state.role == "admin":
