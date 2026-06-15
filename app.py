@@ -140,7 +140,7 @@ else:
 
 # --- ABA 1: VISUALIZAÇÃO COM FILTROS DE BUSCA POR CAMPO ---
 if menu_opcao == "Visualizar Registros":
-    st.header("📋 Banco de Dados Atual (Modo Administrador)" if st.session_state.role == "admin" else "📋 Banco de Dados Atual")
+    st.header("📋 Registros Gravados (Modo Administrador)" if st.session_state.role == "admin" else "📋 Banco de Dados Atual")
     df_base = run_query(view_query, params, is_select=True)
     
     if df_base.empty:
