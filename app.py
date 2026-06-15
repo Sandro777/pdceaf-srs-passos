@@ -5,7 +5,7 @@ import unicodedata
 from datetime import datetime
 
 # Configuração da página do Streamlit
-st.set_page_config(page_title="Gestão PDCEAF - SRS Passos", layout="wide")
+st.set_page_config(page_title="Sistema PDCEAF - SRS Passos", layout="wide")
 
 # 1. LISTA OFICIAL DE MUNICÍPIOS DA SRS PASSOS MG
 MUNICIPIOS_SRS = [
@@ -105,7 +105,7 @@ def logout_user():
 
 # --- TELA DE LOGIN ---
 if not st.session_state.logged_in:
-    st.markdown("<h2 style='text-align: center;'>🔐 Sistema de Gerenciamento PDCEAF</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>🔐 Sistema de Alimentação Planilha PDCEAF</h2>", unsafe_allow_html=True)
     st.markdown("<h4 style='text-align: center; color: gray;'>SRS Passos - MG</h4>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -126,7 +126,13 @@ if not st.session_state.logged_in:
 # --- ÁREA LOGADA ---
 st.sidebar.title("📌 Menu de Navegação")
 st.sidebar.info(f"**Usuário:**\n{st.session_state.username}")
-menu_opcao = st.sidebar.radio("Selecione uma ação:", ["Visualizar Registros", "Inserir Novo Registro", "Gerenciar Existentes"])
+
+# Define as opções do menu de acordo com o nível de privilégio do usuário
+menu_opcoes = ["Visualizar Registros", "Inserir Novo Registro", "Gerenciar Existentes"]
+if st.session_state.role == "admin":
+    menu_opcoes.append("Backup e Restauração")
+
+menu_opcao = st.sidebar.radio("Selecione uma ação:", menu_opcoes)
 
 if st.sidebar.button("🚪 Sair do Sistema"):
     logout_user()
@@ -140,16 +146,14 @@ else:
 
 # --- ABA 1: VISUALIZAÇÃO COM FILTROS DE BUSCA POR CAMPO ---
 if menu_opcao == "Visualizar Registros":
-    st.header("📋 Registros Gravados (Modo Administrador)" if st.session_state.role == "admin" else "📋 Banco de Dados Atual")
+    st.header("📋 Banco de Dados Atual (Modo Administrador)" if st.session_state.role == "admin" else "📋 Banco de Dados Atual")
     df_base = run_query(view_query, params, is_select=True)
     
     if df_base.empty:
         st.warning("Nenhum registro cadastrado no sistema.")
     else:
-        # PAINEL DE FILTROS SUPERIORES (Em cima da tabela de visualização)
         st.markdown("### 🔍 Filtros de Busca Avançada")
         
-        # Linha 1 de Filtros
         f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         with f_col1:
             f_nome = st.text_input("👤 Nome do Paciente", key="filter_nome")
@@ -160,7 +164,6 @@ if menu_opcao == "Visualizar Registros":
         with f_col4:
             f_medicamento = st.text_input("💊 Medicamento", key="filter_med")
             
-        # Linha 2 de Filtros
         f_col5, f_col6, f_col7, f_col8 = st.columns(4)
         with f_col5:
             f_sigaf = st.text_input("🔢 N° SIGAF", key="filter_sigaf")
@@ -171,7 +174,6 @@ if menu_opcao == "Visualizar Registros":
         with f_col8:
             f_resolvido = st.selectbox("✅ Resolvido", ["Todos", "Sim", "Não"], key="filter_resolvido")
 
-        # Processamento e filtragem progressiva no DataFrame (Garante imunidade a maiúsculas/minúsculas)
         df = df_base.copy()
         if f_nome:
             df = df[df['nome'].astype(str).str.contains(f_nome, case=False, na=False)]
@@ -193,7 +195,6 @@ if menu_opcao == "Visualizar Registros":
 
         st.markdown("---")
         
-        # Exibição do resultado filtrado
         if df.empty:
             st.info("Nenhum registro corresponde aos critérios dos filtros aplicados.")
         else:
@@ -327,45 +328,4 @@ elif menu_opcao == "Gerenciar Existentes":
             
         r2_c1, r2_c2, r2_c3 = st.columns(3)
         with r2_c1:
-            edit_num_sigaf = st.text_input("4. N° SIGAF", value=row["num_sigaf"])
-        with r2_c2:
-            edit_num_sei = st.text_input("5. N° SEI", value=row["num_sei"])
-        with r2_c3:
-            try:
-                dt_obj = datetime.strptime(row["data_envio"], "%Y-%m-%d")
-            except:
-                dt_obj = datetime.today()
-            edit_data_envio = st.date_input("6. Data de Envio", dt_obj).strftime("%Y-%m-%d")
-            
-        r3_c1, r3_c2, r3_c3 = st.columns([2, 1, 1])
-        with r3_c1:
-            edit_medicamento = st.text_input("7. Medicamento", value=row["medicamento"])
-        with r3_c2:
-            opcoes_sigaf = ["Deferido", "Indeferido", "Em análise", "Em certificação"]
-            idx_sigaf = opcoes_sigaf.index(row["status_sigaf"]) if row["status_sigaf"] in opcoes_sigaf else 0
-            edit_status_sigaf = st.selectbox("8. Status SIGAF", opcoes_sigaf, index=idx_sigaf)
-        with r3_c3:
-            opcoes_caf = ["Monitoramento", "Processo Novo", "Reavaliação", "Via Rápida", "Via Urgente"]
-            idx_caf = opcoes_caf.index(row["situacao_caf"]) if row["situacao_caf"] in opcoes_caf else 0
-            edit_situacao_caf = st.selectbox("9. Situação (Preenchimento CAF)", opcoes_caf, index=idx_caf)
-            
-        r4_c1, r4_c2 = st.columns([3, 1])
-        with r4_c1:
-            edit_analisado_por = st.text_input("10. Analisado por:", value=row["analisado_por"])
-        with r4_c2:
-            st.markdown("<div style='padding-top: 28px;'></div>", unsafe_allow_html=True)
-            edit_resolvido = st.checkbox("11. Resolvido", value=bool(row["resolvido"]))
-            
-        st.markdown("<div style='padding-top: 15px;'></div>", unsafe_allow_html=True)
-        
-        btn_atualizar, btn_deletar = st.columns(2)
-        with btn_atualizar:
-            if st.button("💾 Gravar Alterações", use_container_width=True):
-                update_sql = "UPDATE registros SET municipio=?, nome=?, cpf=?, num_sigaf=?, num_sei=?, medicamento=?, status_sigaf=?, data_envio=?, situacao_caf=?, analisado_por=?, resolvido=? WHERE id=?"
-                run_query(update_sql, (edit_municipio, edit_nome, edit_cpf, edit_num_sigaf, edit_num_sei, edit_medicamento, edit_status_sigaf, edit_data_envio, edit_situacao_caf, edit_analisado_por, 1 if edit_resolvido else 0, id_selecionado))
-                st.success("Alterações gravadas com sucesso!")
-                st.rerun()
-                
-        with btn_deletar:
-            if st.button("❌ Excluir Registro Permanente", use_container_width=True):
-                confirmar_exclusao_dialog(id_selecionado, row["nome"], row["municipio"])
+            edit_num_sigaf = st.
