@@ -328,4 +328,4 @@ elif menu_opcao == "Gerenciar Existentes":
             
         r2_c1, r2_c2, r2_c3 = st.columns(3)
         with r2_c1:
-            edit_num_sigaf = st.
+            edit_num_sigaf = st.text_input("4. N° SIGAF", value=row["num_sigaf"])
