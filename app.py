@@ -308,17 +308,16 @@ elif menu_opcao == "Gerenciar Existentes":
     st.header("⚙️ Editar ou Remover Registros")
     df_edit = run_query(view_query, params, is_select=True)
     
-    if df_edit.empty:
-        st.warning("Não há dados disponíveis para edição.")
-    else:
-        registro_opcoes = df_edit.apply(lambda r: f"ID: {r['id']} | Paciente: {r['nome']} ({r['municipio']})", axis=1).tolist()
-        selecionado = st.selectbox("Escolha o registro que deseja modificar:", registro_opcoes)
-        id_selecionado = int(selecionado.split(" | ")[0].replace("ID: ", ""))
-        row = df_edit[df_edit['id'] == id_selecionado].iloc[0]
+    # --- COMECE A COPIAR AQUI ---
+        r4_c1, r4_c2 = st.columns([3, 1])
+        with r4_c1:
+            edit_analisado_por = st.text_input("10. Analisado por:", value=row["analisado_por"])
+        with r4_c2:
+            st.markdown("<div style='padding-top: 28px;'></div>", unsafe_allow_html=True)
+            edit_resolvido = st.checkbox("11. Resolvido", value=bool(row["resolvido"]))
+            
+        st.markdown("<div style='padding-top: 15px;'></div>", unsafe_allow_html=True)
         
-       st.markdown("<div style='padding-top: 15px;'></div>", unsafe_allow_html=True)
-        
-        # CORREÇÃO: Criando as duas colunas corretamente para os botões
         col_btn_atualizar, col_btn_deletar = st.columns(2)
         
         with col_btn_atualizar:
@@ -329,11 +328,11 @@ elif menu_opcao == "Gerenciar Existentes":
                 st.rerun()
                 
         with col_btn_deletar:
-            # O botão agora está corretamente aninhado dentro da coluna e chamará a função @st.dialog
             if st.button("❌ Excluir Registro Permanente", use_container_width=True):
                 confirmar_exclusao_dialog(id_selecionado, row["nome"], row["municipio"])
+        # --- TERMINE DE COPIAR AQUI ---
         
-        r1_c1, r1_c2, r1_c3 = st.columns([2, 1, 1])
+       r1_c1, r1_c2, r1_c3 = st.columns([2, 1, 1])
         with r1_c1:
             edit_nome = st.text_input("1. Nome do Paciente", value=row["nome"])
         with r1_c2:
